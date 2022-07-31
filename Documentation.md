@@ -1,5 +1,6 @@
+## DOCUMENTATION
 
-## API Reference
+### API Reference
 
 #### Get all courses
 
