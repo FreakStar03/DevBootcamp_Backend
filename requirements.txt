@@ -1,1 +1,7 @@
 Flask
+pyjwt==2.0.0
+datetime
+uuid
+Flask-SQLAlchemy
+autopep8
+python-dotenv
