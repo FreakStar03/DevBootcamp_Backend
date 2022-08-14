@@ -1,3 +1,4 @@
+import base64
 from flask import Flask, request, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -25,20 +26,38 @@ class Users(db.Model):
     admin = db.Column(db.Boolean)
 
 
-class Books(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    name = db.Column(db.String(50), unique=True, nullable=False)
-    Author = db.Column(db.String(50), unique=True, nullable=False)
-    Publisher = db.Column(db.String(50), nullable=False)
-    book_prize = db.Column(db.Integer)
-
-
 class Courses(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True, nullable=False)
-    Publisher = db.Column(db.String(50), nullable=False)
-    course_price = db.Column(db.Integer)
+    rate = db.Column(db.Integer)
+    views = db.Column(db.Integer)
+    title = db.Column(db.String(300), nullable=False)
+    link = db.Column(db.String(300), nullable=False)
+    dis = db.Column(db.String(1000), nullable=False)
+
+
+class Tags(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    fid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
+    tags = db.Column(db.String(100), nullable=False)
+
+
+class Instructors(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    fid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    image = db.Column(db.BLOB)
+
+
+class Images(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    fid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
+    image = db.Column(db.BLOB)
+
+
+class Index(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    fid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
+    json = db.Column(db.JSON)
 
 
 def token_required(f):
@@ -95,67 +114,75 @@ def login_user():
     return make_response('could not verify',  401, {'Authentication': '"login required"'})
 
 
-@app.route('/users', methods=['GET'])
-def get_all_users():
-
-    users = Users.query.all()
-    result = []
-    for user in users:
-        user_data = {}
-        user_data['public_id'] = user.public_id
-        user_data['name'] = user.name
-        user_data['password'] = user.password
-        user_data['admin'] = user.admin
-
-        result.append(user_data)
-
-    return jsonify({'users': result})
-
-
-@app.route('/book', methods=['POST'])
+@app.route('/course', methods=['POST'])
 @token_required
-def create_book(current_user):
+def create_course(current_user):
 
     data = request.get_json()
 
-    new_books = Books(name=data['name'], Author=data['Author'], Publisher=data['Publisher'],
-                      book_prize=data['book_prize'], user_id=current_user.id)
-    db.session.add(new_books)
+    new_course = Courses(rate=data['rate'], views=data['views'], title=data['title'],
+                         link=data['link'], dis=data['dis'])
+    db.session.add(new_course)
+
+    names = db.session.query(Courses).order_by(Courses.id.desc()).first()
+    if names is not None:
+        names = names.id
+    else:
+        names = 1
+
+    for child in data['tags']:
+        new_tags = Tags(fid=names, tags=child)
+        db.session.add(new_tags)
+
+    for child in data['image']:
+        new_images = Images(
+            fid=names, image=base64.encodebytes(child.encode()))
+        db.session.add(new_images)
+
+    for child in data['Instructors']:
+        new_instructors = Instructors(
+            fid=names, name=child['instructor'], image=base64.encodebytes(child['instructorImage'].encode()))
+        db.session.add(new_instructors)
+
+    new_index = Index(fid=names, json=data['Index'])
+    db.session.add(new_index)
+
     db.session.commit()
 
-    return jsonify({'message': 'new books created'})
+    return jsonify({'message': 'new course added'})
 
 
-@app.route('/books', methods=['GET'])
+@app.route('/allcourses', methods=['GET'])
 @token_required
-def get_books(current_user):
+def get_allcourses(current_user):
 
-    books = Books.query.filter_by(user_id=current_user.id).all()
+    books = db.session.query(
+        Courses,
+        Tags,
+        Instructors,
+        Images,
+        Index
+    ).filter(
+        Courses.id == Tags.fid
+    ).filter(
+        Courses.id == Instructors.fid
+    ).filter(
+        Courses.id == Images.fid
+    ).filter(
+        Courses.id == Index.fid
+    ).all()
 
-    output = []
-    for book in books:
-        book_data = {}
-        book_data['id'] = book.id
-        book_data['name'] = book.name
-        book_data['Author'] = book.Author
-        book_data['Publisher'] = book.Publisher
-        book_data['book_prize'] = book.book_prize
-        output.append(book_data)
+    # output = []
+    # for book in books:
+    #     book_data = {}
+    #     book_data['id'] = book.id
+    #     book_data['name'] = book.name
+    #     book_data['Author'] = book.Author
+    #     book_data['Publisher'] = book.Publisher
+    #     book_data['book_prize'] = book.book_prize
+    #     output.append(book_data)
 
-    return jsonify({'list_of_books': output})
-
-
-@app.route('/books/<book_id>', methods=['DELETE'])
-@token_required
-def delete_book(current_user, book_id):
-    book = Books.query.filter_by(id=book_id, user_id=current_user.id).first()
-    if not book:
-        return jsonify({'message': 'book does not exist'})
-
-    db.session.delete(book)
-    db.session.commit()
-
-    return jsonify({'message': 'Book deleted'})
+    return jsonify(books)
 
 
 if __name__ == '__main__':

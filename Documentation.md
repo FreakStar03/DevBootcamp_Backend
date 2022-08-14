@@ -22,7 +22,6 @@
 | :-------- | :------- | :-------------------------------- |
 | `id`      | `string` | **Required**. Id of item to fetch |
 
-
 #### Get User
 
 ```http
@@ -32,7 +31,6 @@
 | Parameter | Type     | Description                       |
 | :-------- | :------- | :-------------------------------- |
 | `id`      | `string` | **Required**. Id of item to fetch |
-
 
 #### POST (enroll course to user)
 
@@ -53,6 +51,3 @@
 | Parameter | Type     | Description                       |
 | :-------- | :------- | :-------------------------------- |
 | `id`      | `string` | **Required**. Id of item to fetch |
-
-
-
