@@ -7,7 +7,8 @@ import jwt
 import datetime
 from functools import wraps
 import os
-
+import flask_cors
+cors = flask_cors.CORS()
 app = Flask(__name__)
 
 app.config['SECRET_KEY'] = '004f2af45d3a4e161a7dd2d17fdae47f'
@@ -16,6 +17,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + \
     os.path.join(basedir, 'app.sqlite')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
 db = SQLAlchemy(app)
+cors.init_app(app)
 
 
 class Users(db.Model):
@@ -98,6 +100,11 @@ def signup_user():
 
 @app.route('/login', methods=['POST'])
 def login_user():
+
+    # req = request.get_json(force=True)
+    # username = req.get('username', None)
+    # password = req.get('password', None)
+
     auth = request.authorization
 
     if not auth or not auth.username or not auth.password:
@@ -156,33 +163,52 @@ def create_course(current_user):
 @token_required
 def get_allcourses(current_user):
 
-    books = db.session.query(
-        Courses,
-        Tags,
-        Instructors,
-        Images,
-        Index
-    ).filter(
-        Courses.id == Tags.fid
-    ).filter(
-        Courses.id == Instructors.fid
-    ).filter(
-        Courses.id == Images.fid
-    ).filter(
-        Courses.id == Index.fid
-    ).all()
+    courses = db.session.query(Courses).all()
+    print(courses)
+    output = []
+    for course in courses:
+        # print('first')
 
-    # output = []
-    # for book in books:
-    #     book_data = {}
-    #     book_data['id'] = book.id
-    #     book_data['name'] = book.name
-    #     book_data['Author'] = book.Author
-    #     book_data['Publisher'] = book.Publisher
-    #     book_data['book_prize'] = book.book_prize
-    #     output.append(book_data)
+        index = db.session.query(Index).filter(Index.fid == course.id).all()
+        tags = db.session.query(Tags).filter(Tags.fid == course.id).all()
+        images = db.session.query(Images).filter(Images.fid == course.id).all()
+        instructors = db.session.query(Instructors).filter(
+            Instructors.fid == course.id).all()
 
-    return jsonify(books)
+        course_data = {}
+        course_data['id'] = course.id
+        course_data['rate'] = course.rate
+        course_data['views'] = course.views
+        course_data['title'] = course.title
+        course_data['link'] = course.link
+        course_data['dis'] = course.dis
+
+        for i in index:
+            course_data['Index'] = i.json
+
+        tag_data = []
+        for i in tags:
+            tag_data.append(i.tags)
+        course_data['tags'] = tag_data
+
+        tag_data = []
+        for i in images:
+            tag_data.append(base64.b64decode(i.image).decode('ascii'))
+        course_data['image'] = tag_data
+
+        tag_data = []
+        for i in instructors:
+            temp = {
+                'instructor': i.name,
+                'instructorImage': base64.b64decode(i.image).decode('ascii')
+            }
+            tag_data.append(temp)
+        course_data['Instructors'] = tag_data
+        tag_data = []
+
+        output.append(course_data)
+
+    return jsonify({'list_of_books': output})
 
 
 if __name__ == '__main__':

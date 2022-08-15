@@ -147,7 +147,7 @@ def get_books(current_user):
 
 @app.route('/bookall', methods=['GET'])
 @token_required
-def get_allbooks(current_user):
+def get_allcourses(current_user):
 
     books = Books.query.all()
 
