@@ -1,10 +1,11 @@
 import base64
 from flask import Flask, request, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.dialects.postgresql import UUID
 from werkzeug.security import generate_password_hash, check_password_hash
-import uuid
 import jwt
 import datetime
+import uuid
 from functools import wraps
 import os
 import flask_cors
@@ -13,8 +14,14 @@ app = Flask(__name__)
 
 app.config['SECRET_KEY'] = '004f2af45d3a4e161a7dd2d17fdae47f'
 basedir = os.path.abspath(os.path.dirname(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + \
-    os.path.join(basedir, 'app.sqlite')
+
+# username = 'freakstar03'
+# password = 'password'
+# database = 'devbootcamp'
+app.config['SQLALCHEMY_DATABASE_URI'] = f"postgresql://freakstar03:password@172.18.0.3:5432/devbootcamp"
+
+# app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + \
+#     os.path.join(basedir, 'app.sqlite')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
 db = SQLAlchemy(app)
 cors.init_app(app)
@@ -22,9 +29,9 @@ cors.init_app(app)
 
 class Users(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    public_id = db.Column(db.Integer)
-    name = db.Column(db.String(50))
-    password = db.Column(db.String(50))
+    public_id = db.Column(UUID(as_uuid=True))
+    name = db.Column(db.String(300))
+    password = db.Column(db.String(300))
     admin = db.Column(db.Boolean)
 
 
@@ -47,13 +54,13 @@ class Instructors(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     fid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
-    image = db.Column(db.BLOB)
+    image = db.Column(db.LargeBinary)
 
 
 class Images(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     fid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
-    image = db.Column(db.BLOB)
+    image = db.Column(db.LargeBinary)
 
 
 class Index(db.Model):
@@ -114,7 +121,7 @@ def login_user():
 
     if check_password_hash(user.password, auth.password):
 
-        token = jwt.encode({'public_id': user.public_id, 'exp': datetime.datetime.utcnow(
+        token = jwt.encode({'public_id': str(user.public_id), 'exp': datetime.datetime.utcnow(
         ) + datetime.timedelta(minutes=45)}, app.config['SECRET_KEY'], "HS256")
         return jsonify({'token': token, 'data': auth.username})
 
