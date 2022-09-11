@@ -552,6 +552,6 @@ def updateCompletion(current_user, course_link, index_id):
         return make_response(jsonify(message="failed update completion"), 404)
 
 
+db.create_all()
 if __name__ == '__main__':
-    db.create_all()
     app.run(debug=True)
