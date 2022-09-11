@@ -131,6 +131,11 @@ def make_unique(string):
     return f"{ident}-{string}"
 
 
+@app.route('/')
+def hello_world():
+    return 'Hello, World!'
+
+
 @app.route('/upload/images', methods=['POST'])
 def fileUpload():
     names = []
