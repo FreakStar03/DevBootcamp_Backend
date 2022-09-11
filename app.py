@@ -12,6 +12,7 @@ import uuid
 from functools import wraps
 import os
 import flask_cors
+
 cors = flask_cors.CORS()
 app = Flask(__name__)
 
@@ -132,8 +133,15 @@ def make_unique(string):
 
 
 @app.route('/')
-def hello_world():
-    return 'Hello, World!'
+def homepage():
+    the_time = datetime.datetime.now().strftime("%A, %d %b %Y %l:%M %p")
+
+    return """
+    <h1>Hello heroku</h1>
+    <p>It is currently {time}.</p>
+
+    <img src="http://loremflickr.com/600/400" />
+    """.format(time=the_time)
 
 
 @app.route('/upload/images', methods=['POST'])
@@ -559,4 +567,4 @@ def updateCompletion(current_user, course_link, index_id):
 
 db.create_all()
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=True)
