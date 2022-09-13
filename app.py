@@ -1,101 +1,32 @@
 from flask import send_from_directory
 from uuid import uuid4
 from flask import Flask, request, jsonify
-from flask import make_response
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.dialects.postgresql import UUID
+
+from flask import make_response
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import jwt
 import datetime
-import uuid
 from functools import wraps
 import os
 import flask_cors
 
+
 cors = flask_cors.CORS()
 app = Flask(__name__)
 
-app.config['SECRET_KEY'] = '004f2af45d3a4e161a7dd2d17fdae47f'
+app.config.from_object(os.environ['APP_SETTINGS'])
 basedir = os.path.abspath(os.path.dirname(__file__))
-
-# username = 'freakstar03'
-# password = 'password'
-# database = 'devbootcamp'
-url = "172.18.0.2"
-app.config['SQLALCHEMY_DATABASE_URI'] = f"postgresql://freakstar03:password@" + \
-    url + ":5432/devbootcamp"
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
 db = SQLAlchemy(app)
 cors.init_app(app)
 
-
-class Users(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    public_id = db.Column(UUID(as_uuid=True))
-    name = db.Column(db.String(300))
-    email = db.Column(db.String(300))
-    password = db.Column(db.String(300))
-    admin = db.Column(db.Boolean)
-
-
-class Courses(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    rate = db.Column(db.Integer)
-    views = db.Column(db.Integer)
-    title = db.Column(db.String(300), nullable=False)
-    link = db.Column(db.String(300), nullable=False)
-    dis = db.Column(db.String(1000), nullable=False)
-
-
-class Tags(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    fid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
-    tags = db.Column(db.String(100), nullable=False)
-
-
-class Instructors(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    fid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
-    name = db.Column(db.String(100), nullable=False)
-    image = db.Column(db.String(300), nullable=False)
-
-
-class Images(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    fid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
-    image = db.Column(db.String(300), nullable=False)
-
-
-class Index(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    # indexid = db.Column(db.Integer, db.ForeignKey('index.id'), nullable=False)
-    fid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
-    title = db.Column(db.String(100), nullable=False)
-    parent = db.Column(db.String(100), nullable=False)
-    key = db.Column(db.String(300), nullable=False)
-
-
-class Certificate(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    certificate = db.Column(db.String(300), nullable=False)
-
-
-class Enrollment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    uid = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    cid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
-    certificateid = db.Column(db.Integer, db.ForeignKey(
-        'certificate.id'), nullable=True)
-
-
-class Completion(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    cid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
-    uid = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    indexid = db.Column(db.Integer, db.ForeignKey(
-        'index.id'), nullable=False)
+try:
+    from models import Users, Courses, Completion, Tags, Instructors, Images, Index, Enrollment
+except ImportError:
+    print("no models")
 
 
 def token_required(f):
@@ -223,7 +154,7 @@ def signup_user():
 
     hashed_password = generate_password_hash(data['password'], method='sha256')
 
-    new_user = Users(public_id=str(uuid.uuid4()),
+    new_user = Users(public_id=str(uuid4()),
                      name=data['name'], email=data['email'], password=hashed_password, admin=False)
     db.session.add(new_user)
     db.session.commit()
