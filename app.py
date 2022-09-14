@@ -313,7 +313,7 @@ def get_allcoursesDetail(current_user):
 
 
 @app.route('/allcourses', methods=['GET'])
-def get_allcourses(current_user):
+def get_allcourses():
     courses = db.session.query(Courses).all()
     print(courses)
     output = []
