@@ -337,6 +337,39 @@ def get_allcourses():
     return jsonify({'list_of_books': output})
 
 
+@app.route('/allcoursesofuser', methods=['GET'])
+@token_required
+def get_allcoursesofuser(current_user):
+    enrollment = db.session.query(Enrollment).filter_by(
+        uid=int(current_user.id)).all()
+    print(enrollment)
+    output = []
+    for child in enrollment:
+        courseid = child.cid
+        courses = db.session.query(Courses).filter_by(id=courseid).first()
+        if courses:
+            course = courses
+        # for course in courses:
+            # print('first')
+            images = db.session.query(Images).filter(
+                Images.fid == course.id).first()
+
+            course_data = {}
+            course_data['id'] = course.id
+            course_data['rate'] = course.rate
+            course_data['views'] = course.views
+            course_data['title'] = course.title
+            course_data['link'] = course.link
+            course_data['dis'] = course.dis
+            # course_data['image'] = base64.b64decode(images.image).decode('ascii')
+            course_data['image'] = images.image
+            course_data['certification'] = child.certificateid
+
+            output.append(course_data)
+
+    return jsonify({'list_of_books': output})
+
+
 @app.route('/course/<course_link>', methods=['GET'])
 @token_required
 def get_coursebyLInk(current_user, course_link):
