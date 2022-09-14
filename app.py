@@ -313,7 +313,6 @@ def get_allcoursesDetail(current_user):
 
 
 @app.route('/allcourses', methods=['GET'])
-@token_required
 def get_allcourses(current_user):
     courses = db.session.query(Courses).all()
     print(courses)
