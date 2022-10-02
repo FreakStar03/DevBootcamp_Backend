@@ -11,8 +11,11 @@ import datetime
 from functools import wraps
 import os
 import flask_cors
+import pdfkit
+import stripe
 
-
+stripe.api_key = os.environ['STRIPE_SECRET_KEY']
+endpoint_secret = os.environ['STRIPE_PUBLISHABLE_KEY']
 cors = flask_cors.CORS()
 app = Flask(__name__)
 
@@ -24,7 +27,7 @@ db = SQLAlchemy(app)
 cors.init_app(app)
 
 try:
-    from models import Users, Courses, Completion, Tags, Instructors, Images, Index, Enrollment
+    from models import Users, Courses, Completion, Tags, Instructors, Images, Index, Enrollment, Certificate
 except ImportError:
     print("no models")
 
@@ -75,7 +78,19 @@ def homepage():
     """.format(time=the_time)
 
 
-@app.route('/upload/images', methods=['POST'])
+@app.route('/api/')
+def homepage2():
+    the_time = datetime.datetime.now().strftime("%A, %d %b %Y %l:%M %p")
+
+    return """
+    <h1>Hello heroku</h1>
+    <p>It is currently {time}.</p>
+
+    <img src="http://loremflickr.com/600/400" />
+    """.format(time=the_time)
+
+
+@app.route('/api/upload/images', methods=['POST'])
 def fileUpload():
     names = []
     target = os.path.join(UPLOAD_FOLDER, "static", 'images')
@@ -94,7 +109,7 @@ def fileUpload():
     return response
 
 
-@app.route('/upload/instructor', methods=['POST'])
+@app.route('/api/upload/instructor', methods=['POST'])
 def fileUploadForInstructor():
     # names = []
     # titles_arr = []
@@ -129,7 +144,7 @@ def fileUploadForInstructor():
     return response
 
 
-@app.route('/upload/markdown', methods=['POST'])
+@app.route('/api/upload/markdown', methods=['POST'])
 def fileUploadForMaarkdown():
     names = []
     target = os.path.join(UPLOAD_FOLDER + "protected", 'markdown')
@@ -148,7 +163,7 @@ def fileUploadForMaarkdown():
     return response
 
 
-@app.route('/register', methods=['POST'])
+@app.route('/api/register', methods=['POST'])
 def signup_user():
     data = request.get_json()
 
@@ -166,7 +181,7 @@ def signup_user():
     return jsonify({'user': {'name': data['name'], 'email': data['email']}, 'token': token, 'message': 'registeration successfully'})
 
 
-@app.route('/login', methods=['POST'])
+@app.route('/api/login', methods=['POST'])
 def login_user():
 
     # req = request.get_json(force=True)
@@ -190,14 +205,14 @@ def login_user():
     return make_response(jsonify(message="Wrong Username or Password!"), 404)
 
 
-@app.route('/login', methods=['GET'])
+@app.route('/api/login', methods=['GET'])
 @token_required
 def fetchUserByToken(currentUser):
     data = currentUser
     return jsonify({'user': {'name': data.name, 'email': data.email}, 'message': 'registeration successfully'})
 
 
-@app.route('/course', methods=['POST'])
+@app.route('/api/course', methods=['POST'])
 @token_required
 def create_course(current_user):
 
@@ -243,7 +258,7 @@ def create_course(current_user):
     return jsonify({'message': 'new course added'})
 
 
-@app.route('/allcoursesDetail', methods=['GET'])
+@app.route('/api/allcoursesDetail', methods=['GET'])
 @token_required
 def get_allcoursesDetail(current_user):
 
@@ -312,7 +327,7 @@ def get_allcoursesDetail(current_user):
     return jsonify({'list_of_books': output})
 
 
-@app.route('/allcourses', methods=['GET'])
+@app.route('/api/allcourses', methods=['GET'])
 def get_allcourses():
     courses = db.session.query(Courses).all()
     print(courses)
@@ -337,7 +352,7 @@ def get_allcourses():
     return jsonify({'list_of_books': output})
 
 
-@app.route('/allcoursesofuser', methods=['GET'])
+@app.route('/api/allcoursesofuser', methods=['GET'])
 @token_required
 def get_allcoursesofuser(current_user):
     enrollment = db.session.query(Enrollment).filter_by(
@@ -370,7 +385,7 @@ def get_allcoursesofuser(current_user):
     return jsonify({'list_of_books': output})
 
 
-@app.route('/course/<course_link>', methods=['GET'])
+@app.route('/api/course/<course_link>', methods=['GET'])
 @token_required
 def get_coursebyLInk(current_user, course_link):
 
@@ -379,7 +394,8 @@ def get_coursebyLInk(current_user, course_link):
     output = {}
     if course:
         # print('first')
-
+        checkCert = Enrollment.query.filter(
+            Enrollment.cid == course.id, Enrollment.uid == current_user.id).first()
         index = db.session.query(Index).filter(Index.fid == course.id).all()
         completion = db.session.query(Completion).filter(
             Completion.cid == course.id, Completion.uid == int(current_user.id)).all()
@@ -395,6 +411,11 @@ def get_coursebyLInk(current_user, course_link):
         course_data['title'] = course.title
         course_data['link'] = course.link
         course_data['dis'] = course.dis
+        course_data['certification'] = False
+        try:
+            course_data['certification'] = checkCert.certificateid
+        except AttributeError:
+            print("YOU link not found ... breaking out")
 
         IndexData = {}
 
@@ -464,9 +485,9 @@ def get_coursebyLInk(current_user, course_link):
         return make_response(jsonify(message="no course found"), 404)
 
 
-@app.route('/md/<path>')
+@app.route('/api/md/<path>')
 @token_required
-def send_report(current_user, path):
+def send_md(current_user, path):
     updatepath = path + ".md"
     target = os.path.join(UPLOAD_FOLDER, "protected", 'markdown')
     target2 = os.path.join(UPLOAD_FOLDER, "protected", 'markdown', updatepath)
@@ -476,7 +497,19 @@ def send_report(current_user, path):
         return make_response(jsonify(message="no such content!"), 404)
 
 
-@app.route('/enroll/<course_id>', methods=['POST'])
+@app.route('/api/json/<path>')
+@token_required
+def send_json(current_user, path):
+    updatepath = path + ".json"
+    target = os.path.join(UPLOAD_FOLDER, "protected", 'json')
+    target2 = os.path.join(UPLOAD_FOLDER, "protected", 'json', updatepath)
+    if os.path.isfile(target2):
+        return send_from_directory(target, updatepath)
+    else:
+        return make_response(jsonify(message="no such content!"), 404)
+
+
+@app.route('/api/enroll/<course_id>', methods=['POST'])
 @token_required
 def enrollUser(current_user, course_id):
     data = request.get_json()
@@ -491,7 +524,7 @@ def enrollUser(current_user, course_id):
         return make_response(jsonify(message="wrong course"), 404)
 
 
-@app.route('/enroll/<course_id>', methods=['GET'])
+@app.route('/api/enroll/<course_id>', methods=['GET'])
 @token_required
 def enrollUserGet(current_user, course_id):
     course = db.session.query(Courses).filter_by(link=course_id).first()
@@ -507,7 +540,7 @@ def enrollUserGet(current_user, course_id):
         return make_response(jsonify(message="wrong course"), 404)
 
 
-@app.route('/completion/<course_link>/<index_id>', methods=['POST'])
+@app.route('/api/completion/<course_link>/<index_id>', methods=['POST'])
 @token_required
 def updateCompletion(current_user, course_link, index_id):
     course = db.session.query(Courses).filter_by(link=course_link).first()
@@ -526,6 +559,130 @@ def updateCompletion(current_user, course_link, index_id):
         return jsonify({'message': 'updated completion'})
     else:
         return make_response(jsonify(message="failed update completion"), 404)
+
+
+@app.route('/api/course/check/<course_link>', methods=['GET'])
+@token_required
+def checkCompletionHalf(current_user, course_link):
+    course = db.session.query(Courses).filter_by(link=course_link).first()
+    if course:
+        index = db.session.query(Index).filter(Index.fid == course.id).all()
+        courseID = course.id
+        completion = db.session.query(Completion).filter(Completion.cid == int(courseID), Completion.uid == int(
+            current_user.id)).all()
+        print(len(index))
+        print(len(completion))
+        if len(index) == len(completion) + 1:
+            return jsonify({'message': 'ready for final quiz', 'status': 'incomplete'})
+        elif len(index) == len(completion):
+
+            checkCert = Enrollment.query.filter(
+                Enrollment.cid == courseID, Enrollment.uid == current_user.id).first()
+            checkCertEnroll = checkCert.certificateid
+            if checkCertEnroll:
+                return jsonify({'message': 'already completed', 'status': 'completed'})
+            else:
+                checkCert.certificateid = True
+                db.session.commit()
+                # add_Cert = Certificate(
+                #     cid=int(courseID), uid=int(current_user.id))
+                # db.session.add(add_Cert)
+                # db.session.commit()
+                return jsonify({'message': ' generated certificate ', 'status': 'completed'})
+
+        else:
+            return make_response(jsonify(message="complete prev module"), 404)
+    else:
+        return make_response(jsonify(message="complete prev module"), 404)
+
+
+@app.route('/api/course/<course_link>/certificate', methods=['GET'])
+@token_required
+def downloadCert(current_user, course_link):
+    course = db.session.query(Courses).filter_by(link=course_link).first()
+    if course:
+        checkCert = Enrollment.query.filter(
+            Enrollment.cid == course.id, Enrollment.uid == current_user.id).first()
+        if(checkCert.certificateid):
+            html = """
+                <div style="width:800px; height:600px; padding:20px; text-align:center; border: 10px solid #787878">
+                    <div style="width:750px; height:550px; padding:20px; text-align:center; border: 5px solid #787878">
+                        <span style="font-size:50px; font-weight:bold">Certificate of Completion</span>
+                        <br><br>
+                        <span style="font-size:25px"><i>This is to certify that</i></span>
+                        <br><br>
+                        <span style="font-size:30px"><b>%s</b></span><br/><br/>
+                        <span style="font-size:25px"><i>has completed the course</i></span> <br/><br/>
+                        <span style="font-size:30px">%s</span> <br/><br/>
+                        <span style="font-size:20px">with score of <b>%s</b></span> <br/><br/><br/><br/>
+                        <span style="font-size:25px"><i>dated</i></span><br>
+                        %s
+                        <span style="font-size:30px">%s</span>
+                    </div>
+                </div>
+            """ % (current_user.name, course.title, '100%',  'November 2022,', '10')
+            pdf = pdfkit.from_string(html, False)
+            response = make_response(pdf)
+            response.headers.set('Content-Type', 'application/pdf')
+            response.headers.set('Content-Disposition',
+                                 'inline', filename='certificate.pdf')
+            return response
+        return make_response(jsonify(message="wrong course"), 404)
+    else:
+        return make_response(jsonify(message="wrong course"), 404)
+
+
+# Payment
+user_info = {}
+
+
+@app.route('/pay', methods=['POST'])
+def pay():
+    email = request.json.get('email', None)
+    amount = request.json.get('amount', None)
+    print("amount : %s" % (amount))
+
+    if not email:
+        return 'You need to send an Email!', 400
+
+    intent = stripe.PaymentIntent.create(
+        amount=int(amount),
+        currency='inr',
+        receipt_email=email
+    )
+
+    return {"client_secret": intent["client_secret"]}, 200
+
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    payload = request.get_data()
+    sig_header = request.headers.get('Stripe_Signature', None)
+
+    if not sig_header:
+        return 'No Signature Header!', 400
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, endpoint_secret
+        )
+    except ValueError as e:
+        # Invalid payload
+        return 'Invalid payload', 400
+    except stripe.error.SignatureVerificationError as e:
+        # Invalid signature
+        return 'Invalid signature', 400
+
+    if event['type'] == 'payment_intent.succeeded':
+        # contains the email that will recive the recipt for the payment (users email usually)
+        email = event['data']['object']['receipt_email']
+
+        user_info['paid_50'] = True
+        user_info['email'] = email
+    else:
+        return 'Unexpected event type', 400
+
+    return '', 200
 
 
 db.create_all()

@@ -40,15 +40,15 @@ class Index(db.Model):
 
 class Certificate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    certificate = db.Column(db.String(300), nullable=False)
+    cid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
+    uid = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
 
 class Enrollment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     uid = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     cid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
-    certificateid = db.Column(db.Integer, db.ForeignKey(
-        'certificate.id'), nullable=True)
+    certificateid = db.Column(db.Boolean, default=False)
 
 
 class Completion(db.Model):
