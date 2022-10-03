@@ -1,6 +1,6 @@
 from flask import send_from_directory
 from uuid import uuid4
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from flask_sqlalchemy import SQLAlchemy
 
 from flask import make_response
@@ -13,6 +13,7 @@ import os
 import flask_cors
 import pdfkit
 import stripe
+from flask_mail import Mail
 
 stripe.api_key = os.environ['STRIPE_SECRET_KEY']
 endpoint_secret = os.environ['STRIPE_PUBLISHABLE_KEY']
@@ -25,9 +26,12 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
 db = SQLAlchemy(app)
 cors.init_app(app)
+mail = Mail(app)
 
 try:
     from models import Users, Courses, Completion, Tags, Instructors, Images, Index, Enrollment, Certificate
+    from emailtoken import generate_confirmation_token, confirm_token
+    from emailSend import send_email
 except ImportError:
     print("no models")
 
@@ -52,8 +56,37 @@ def token_required(f):
             # return jsonify({'message': 'token is invalid'})
             return make_response(jsonify({'message': 'token is invalid'}), 404)
 
+        kwargs['current_user'] = current_user
         return f(current_user, *args, **kwargs)
     return decorator
+
+
+def remove_kwargs(func):
+    @wraps(func)
+    def decorated_function(*args, **kwargs):
+        try:
+            kwargs['current_user']
+            current_user = kwargs.pop('current_user')
+        except:
+            return make_response(jsonify({'message': 'user is unauthenticated'}), 404)
+        return func(*args, **kwargs)
+
+    return decorated_function
+
+
+def check_confirmed(func):
+    @wraps(func)
+    def decorated_function(*args, **kwargs):
+        try:
+            kwargs['current_user']
+            current_user = kwargs.pop('current_user')
+        except:
+            return make_response(jsonify({'message': 'user is unauthenticated'}), 404)
+        if current_user.confirmed is False:
+            return make_response(jsonify({'message': 'user is unauthenticated'}), 404)
+        return func(*args, **kwargs)
+
+    return decorated_function
 
 
 UPLOAD_FOLDER = app.root_path
@@ -170,7 +203,7 @@ def signup_user():
     hashed_password = generate_password_hash(data['password'], method='sha256')
 
     new_user = Users(public_id=str(uuid4()),
-                     name=data['name'], email=data['email'], password=hashed_password, admin=False)
+                     name=data['name'], email=data['email'], password=hashed_password, admin=False, confirmed=False)
     db.session.add(new_user)
     db.session.commit()
 
@@ -178,7 +211,42 @@ def signup_user():
 
     token = jwt.encode({'public_id': str(user.public_id), 'exp': datetime.datetime.utcnow(
     ) + datetime.timedelta(minutes=45)}, app.config['SECRET_KEY'], "HS256")
+
+    mail_token = generate_confirmation_token(user.email)
+    # confirm_url = url_for('user.confirm_email', token=mail_token, _external=True)
+    # html = render_template('user/activate.html', confirm_url=confirm_url)
+    subject = "Please confirm your email"
+    htmlText = """
+    <p>Welcome! Thanks for signing up. Please follow this link to activate your account:</p>
+    <p><a href="{{ confirm_url }}">{{ confirm_url }}</a></p>
+    <br>
+    <p>Cheers!</p>
+    """
+    confirm_url = "http://localhost:3000/DevBootCamp/confirm/%s" % mail_token
+    html = render_template("email.html", confirm_url=confirm_url)
+    send_email(user.email, subject, html)
+
     return jsonify({'user': {'name': data['name'], 'email': data['email']}, 'token': token, 'message': 'registeration successfully'})
+
+
+@app.route('/api/confirm/<token>')
+@token_required
+@remove_kwargs
+def confirm_email(current_user,  token):
+    try:
+        email = confirm_token(token)
+    except:
+        return jsonify({'message': ' Link Expired! '})
+    if not email:
+        return jsonify({'message': ' Link Expired! '})
+    user = Users.query.filter_by(email=email).first_or_404()
+    if user.confirmed:
+        return make_response(jsonify(message="Account already confirmed!"), 404)
+        # return jsonify({'message': ' Account already confirmed! '})
+    else:
+        user.confirmed = True
+        db.session.commit()
+        return jsonify({'message': ' Account confirmed! '})
 
 
 @app.route('/api/login', methods=['POST'])
@@ -207,6 +275,7 @@ def login_user():
 
 @app.route('/api/login', methods=['GET'])
 @token_required
+@remove_kwargs
 def fetchUserByToken(currentUser):
     data = currentUser
     return jsonify({'user': {'name': data.name, 'email': data.email}, 'message': 'registeration successfully'})
@@ -214,6 +283,7 @@ def fetchUserByToken(currentUser):
 
 @app.route('/api/course', methods=['POST'])
 @token_required
+@check_confirmed
 def create_course(current_user):
 
     data = request.get_json()
@@ -259,7 +329,6 @@ def create_course(current_user):
 
 
 @app.route('/api/allcoursesDetail', methods=['GET'])
-@token_required
 def get_allcoursesDetail(current_user):
 
     courses = db.session.query(Courses).all()
@@ -353,7 +422,6 @@ def get_allcourses():
 
 
 @app.route('/api/allcoursesofuser', methods=['GET'])
-@token_required
 def get_allcoursesofuser(current_user):
     enrollment = db.session.query(Enrollment).filter_by(
         uid=int(current_user.id)).all()
@@ -386,7 +454,6 @@ def get_allcoursesofuser(current_user):
 
 
 @app.route('/api/course/<course_link>', methods=['GET'])
-@token_required
 def get_coursebyLInk(current_user, course_link):
 
     course = db.session.query(Courses).filter_by(link=course_link).first()
@@ -487,6 +554,7 @@ def get_coursebyLInk(current_user, course_link):
 
 @app.route('/api/md/<path>')
 @token_required
+@check_confirmed
 def send_md(current_user, path):
     updatepath = path + ".md"
     target = os.path.join(UPLOAD_FOLDER, "protected", 'markdown')
@@ -499,6 +567,7 @@ def send_md(current_user, path):
 
 @app.route('/api/json/<path>')
 @token_required
+@check_confirmed
 def send_json(current_user, path):
     updatepath = path + ".json"
     target = os.path.join(UPLOAD_FOLDER, "protected", 'json')
@@ -511,6 +580,7 @@ def send_json(current_user, path):
 
 @app.route('/api/enroll/<course_id>', methods=['POST'])
 @token_required
+@check_confirmed
 def enrollUser(current_user, course_id):
     data = request.get_json()
     course = db.session.query(Courses).filter_by(link=course_id).first()
@@ -526,6 +596,7 @@ def enrollUser(current_user, course_id):
 
 @app.route('/api/enroll/<course_id>', methods=['GET'])
 @token_required
+@check_confirmed
 def enrollUserGet(current_user, course_id):
     course = db.session.query(Courses).filter_by(link=course_id).first()
     if course:
@@ -542,6 +613,7 @@ def enrollUserGet(current_user, course_id):
 
 @app.route('/api/completion/<course_link>/<index_id>', methods=['POST'])
 @token_required
+@check_confirmed
 def updateCompletion(current_user, course_link, index_id):
     course = db.session.query(Courses).filter_by(link=course_link).first()
     index = db.session.query(Index).filter_by(key=index_id).first()
@@ -563,6 +635,7 @@ def updateCompletion(current_user, course_link, index_id):
 
 @app.route('/api/course/check/<course_link>', methods=['GET'])
 @token_required
+@check_confirmed
 def checkCompletionHalf(current_user, course_link):
     course = db.session.query(Courses).filter_by(link=course_link).first()
     if course:
@@ -598,12 +671,13 @@ def checkCompletionHalf(current_user, course_link):
 
 @app.route('/api/course/<course_link>/certificate', methods=['GET'])
 @token_required
+@check_confirmed
 def downloadCert(current_user, course_link):
     course = db.session.query(Courses).filter_by(link=course_link).first()
     if course:
         checkCert = Enrollment.query.filter(
             Enrollment.cid == course.id, Enrollment.uid == current_user.id).first()
-        if(checkCert.certificateid):
+        if (checkCert.certificateid):
             html = """
                 <div style="width:800px; height:600px; padding:20px; text-align:center; border: 10px solid #787878">
                     <div style="width:750px; height:550px; padding:20px; text-align:center; border: 5px solid #787878">
@@ -636,8 +710,10 @@ def downloadCert(current_user, course_link):
 user_info = {}
 
 
-@app.route('/pay', methods=['POST'])
-def pay():
+@app.route('/api/pay', methods=['POST'])
+@token_required
+@check_confirmed
+def pay(current_user):
     email = request.json.get('email', None)
     amount = request.json.get('amount', None)
     print("amount : %s" % (amount))

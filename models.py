@@ -75,3 +75,4 @@ class Users(db.Model):
     email = db.Column(db.String(300))
     password = db.Column(db.String(300))
     admin = db.Column(db.Boolean)
+    confirmed = db.Column(db.Boolean, nullable=False, default=False)

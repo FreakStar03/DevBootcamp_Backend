@@ -12,6 +12,22 @@ class Config(object):
         SQLALCHEMY_DATABASE_URI = SQLALCHEMY_DATABASE_URI.replace(
             "postgres://", "postgresql://", 1)
 
+    SECRET_KEY = os.environ['SECRET_KEY']
+    SECURITY_PASSWORD_SALT = os.environ['SECURITY_PASSWORD_SALT']
+
+    # mail settings
+    MAIL_SERVER = 'smtp.googlemail.com'
+    MAIL_PORT = 465
+    MAIL_USE_TLS = False
+    MAIL_USE_SSL = True
+
+    # gmail authentication
+    MAIL_USERNAME = os.environ['APP_MAIL_USERNAME']
+    MAIL_PASSWORD = os.environ['APP_MAIL_PASSWORD']
+
+    # mail accounts
+    MAIL_DEFAULT_SENDER = os.environ['APP_MAIL_ID']
+
 
 class ProductionConfig(Config):
     DEBUG = False
