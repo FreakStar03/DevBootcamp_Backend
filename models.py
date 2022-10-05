@@ -42,12 +42,16 @@ class Certificate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     cid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
     uid = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    marks = db.Column(db.Integer, nullable=False)
+    date = db.Column(db.Date, nullable=False)
 
 
 class Enrollment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     uid = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     cid = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=False)
+    marks = db.Column(db.Integer, nullable=True)
+    date = db.Column(db.Date, nullable=True)
     certificateid = db.Column(db.Boolean, default=False)
 
 
@@ -66,6 +70,8 @@ class Courses(db.Model):
     title = db.Column(db.String(300), nullable=False)
     link = db.Column(db.String(300), nullable=False)
     dis = db.Column(db.String(1000), nullable=False)
+    price = db.Column(db.Integer, nullable=False)
+    category = db.Column(db.String(300), nullable=False)
 
 
 class Users(db.Model):

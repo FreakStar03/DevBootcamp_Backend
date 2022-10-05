@@ -179,8 +179,8 @@ def fileUploadForInstructor():
 
 @app.route('/api/upload/markdown', methods=['POST'])
 def fileUploadForMaarkdown():
-    names = []
-    target = os.path.join(UPLOAD_FOLDER + "protected", 'markdown')
+    names = ""
+    target = os.path.join(UPLOAD_FOLDER + "/protected", 'markdown')
     if not os.path.isdir(target):
         os.mkdir(target)
     print("welcome to upload`")
@@ -190,7 +190,26 @@ def fileUploadForMaarkdown():
         filename = secure_filename(make_unique(file.filename))
         destination = "/".join([target, filename])
         file.save(destination)
-        names.append(filename)
+        names = filename
+    # session['uploadFilePath'] = destination
+    response = jsonify({'message': 'uploaded', 'names': names})
+    return response
+
+
+@app.route('/api/upload/json', methods=['POST'])
+def fileUploadForJson():
+    names = ""
+    target = os.path.join(UPLOAD_FOLDER + "/protected", 'json')
+    if not os.path.isdir(target):
+        os.mkdir(target)
+    print("welcome to upload`")
+    # file = request.files['file']
+    files = request.files.getlist("file")
+    for file in files:
+        filename = secure_filename(make_unique(file.filename))
+        destination = "/".join([target, filename])
+        file.save(destination)
+        names = filename
     # session['uploadFilePath'] = destination
     response = jsonify({'message': 'uploaded', 'names': names})
     return response
@@ -289,7 +308,7 @@ def create_course(current_user):
     data = request.get_json()
 
     new_course = Courses(rate=data['rate'], views=data['views'], title=data['title'],
-                         link=data['link'], dis=data['dis'])
+                         link=data['link'], dis=data['dis'], category=data['category'], price=data['price'])
     db.session.add(new_course)
 
     names = db.session.query(Courses).order_by(Courses.id.desc()).first()
@@ -329,6 +348,8 @@ def create_course(current_user):
 
 
 @app.route('/api/allcoursesDetail', methods=['GET'])
+@token_required
+@check_confirmed
 def get_allcoursesDetail(current_user):
 
     courses = db.session.query(Courses).all()
@@ -350,6 +371,8 @@ def get_allcoursesDetail(current_user):
         course_data['title'] = course.title
         course_data['link'] = course.link
         course_data['dis'] = course.dis
+        course_data['price'] = course.price
+        course_data['category'] = course.category
 
         # for i in index:
         #     course_data['Index'] = i.json
@@ -415,6 +438,8 @@ def get_allcourses():
         course_data['dis'] = course.dis
         # course_data['image'] = base64.b64decode(images.image).decode('ascii')
         course_data['image'] = images.image
+        course_data['price'] = course.price
+        course_data['category'] = course.category
 
         output.append(course_data)
 
@@ -422,6 +447,8 @@ def get_allcourses():
 
 
 @app.route('/api/allcoursesofuser', methods=['GET'])
+@token_required
+@check_confirmed
 def get_allcoursesofuser(current_user):
     enrollment = db.session.query(Enrollment).filter_by(
         uid=int(current_user.id)).all()
@@ -447,6 +474,8 @@ def get_allcoursesofuser(current_user):
             # course_data['image'] = base64.b64decode(images.image).decode('ascii')
             course_data['image'] = images.image
             course_data['certification'] = child.certificateid
+            course_data['price'] = course.price
+            course_data['category'] = course.category
 
             output.append(course_data)
 
@@ -454,6 +483,8 @@ def get_allcoursesofuser(current_user):
 
 
 @app.route('/api/course/<course_link>', methods=['GET'])
+@token_required
+@check_confirmed
 def get_coursebyLInk(current_user, course_link):
 
     course = db.session.query(Courses).filter_by(link=course_link).first()
@@ -479,18 +510,22 @@ def get_coursebyLInk(current_user, course_link):
         course_data['link'] = course.link
         course_data['dis'] = course.dis
         course_data['certification'] = False
+        course_data['price'] = course.price
+        course_data['category'] = course.category
         try:
             course_data['certification'] = checkCert.certificateid
         except AttributeError:
             print("YOU link not found ... breaking out")
 
         IndexData = {}
+        if completion:
+            completionArr = []
+            for c in completion:
+                completionArr.append(c.indexid)
+        else:
+            completionArr = []
 
-        completionArr = []
-        for c in completion:
-            completionArr.append(c.indexid)
-
-        print(completionArr)
+        # print(completionArr)
 
         for i in index:
             if i.id in completionArr:
@@ -556,7 +591,7 @@ def get_coursebyLInk(current_user, course_link):
 @token_required
 @check_confirmed
 def send_md(current_user, path):
-    updatepath = path + ".md"
+    updatepath = path
     target = os.path.join(UPLOAD_FOLDER, "protected", 'markdown')
     target2 = os.path.join(UPLOAD_FOLDER, "protected", 'markdown', updatepath)
     if os.path.isfile(target2):
@@ -569,7 +604,7 @@ def send_md(current_user, path):
 @token_required
 @check_confirmed
 def send_json(current_user, path):
-    updatepath = path + ".json"
+    updatepath = path
     target = os.path.join(UPLOAD_FOLDER, "protected", 'json')
     target2 = os.path.join(UPLOAD_FOLDER, "protected", 'json', updatepath)
     if os.path.isfile(target2):
@@ -633,10 +668,11 @@ def updateCompletion(current_user, course_link, index_id):
         return make_response(jsonify(message="failed update completion"), 404)
 
 
-@app.route('/api/course/check/<course_link>', methods=['GET'])
+@app.route('/api/course/check/<course_link>', methods=['POST'])
 @token_required
 @check_confirmed
 def checkCompletionHalf(current_user, course_link):
+    data = request.get_json()
     course = db.session.query(Courses).filter_by(link=course_link).first()
     if course:
         index = db.session.query(Index).filter(Index.fid == course.id).all()
@@ -648,20 +684,23 @@ def checkCompletionHalf(current_user, course_link):
         if len(index) == len(completion) + 1:
             return jsonify({'message': 'ready for final quiz', 'status': 'incomplete'})
         elif len(index) == len(completion):
-
+            # Add Certificate
             checkCert = Enrollment.query.filter(
                 Enrollment.cid == courseID, Enrollment.uid == current_user.id).first()
             checkCertEnroll = checkCert.certificateid
+
             if checkCertEnroll:
                 return jsonify({'message': 'already completed', 'status': 'completed'})
             else:
-                checkCert.certificateid = True
-                db.session.commit()
-                # add_Cert = Certificate(
-                #     cid=int(courseID), uid=int(current_user.id))
-                # db.session.add(add_Cert)
-                # db.session.commit()
-                return jsonify({'message': ' generated certificate ', 'status': 'completed'})
+                try:
+                    if data['marks']:
+                        checkCert.certificateid = True
+                        checkCert.marks = data['marks']
+                        checkCert.date = datetime.date.today()
+                        db.session.commit()
+                        return jsonify({'message': ' generated certificate ', 'status': 'completed'})
+                except:
+                    return jsonify({'message': 'already completed FAILS', 'status': 'completed'})
 
         else:
             return make_response(jsonify(message="complete prev module"), 404)
@@ -691,10 +730,10 @@ def downloadCert(current_user, course_link):
                         <span style="font-size:20px">with score of <b>%s</b></span> <br/><br/><br/><br/>
                         <span style="font-size:25px"><i>dated</i></span><br>
                         %s
-                        <span style="font-size:30px">%s</span>
+                        <span style="font-size:30px"></span>
                     </div>
                 </div>
-            """ % (current_user.name, course.title, '100%',  'November 2022,', '10')
+            """ % (current_user.name, course.title, checkCert.marks,  checkCert.date)
             pdf = pdfkit.from_string(html, False)
             response = make_response(pdf)
             response.headers.set('Content-Type', 'application/pdf')
@@ -714,8 +753,9 @@ user_info = {}
 @token_required
 @check_confirmed
 def pay(current_user):
-    email = request.json.get('email', None)
-    amount = request.json.get('amount', None)
+    data = request.get_json()
+    email = data['email']
+    amount = data['amount']
     print("amount : %s" % (amount))
 
     if not email:
