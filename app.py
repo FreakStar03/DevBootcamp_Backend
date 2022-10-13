@@ -738,8 +738,8 @@ def downloadCert(current_user, course_link):
                 config = pdfkit.configuration()
             else:
                 config = pdfkit.configuration(wkhtmltopdf='./bin/wkhtmltopdf')
-            
-            pdf = pdfkit.from_string(html, False)
+
+            pdf = pdfkit.from_string(html, False, configuration=config)
             response = make_response(pdf)
             response.headers.set('Content-Type', 'application/pdf')
             response.headers.set('Content-Disposition',
