@@ -2,14 +2,15 @@ from flask import send_from_directory
 from uuid import uuid4
 from flask import Flask, request, jsonify, render_template
 from flask_sqlalchemy import SQLAlchemy
-
+import os
+import subprocess
+import platform
 from flask import make_response
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import jwt
 import datetime
 from functools import wraps
-import os
 import flask_cors
 import pdfkit
 import stripe
@@ -708,6 +709,21 @@ def checkCompletionHalf(current_user, course_link):
         return make_response(jsonify(message="complete prev module"), 404)
 
 
+def _get_pdfkit_config():
+    """wkhtmltopdf lives and functions differently depending on Windows or Linux. We
+     need to support both since we develop on windows but deploy on Heroku.
+
+    Returns:
+        A pdfkit configuration
+    """
+    if platform.system() == 'Windows':
+        return pdfkit.configuration(wkhtmltopdf=os.environ.get('WKHTMLTOPDF_BINARY', 'C:\\Program Files\\wkhtmltopdf\\bin\\wkhtmltopdf.exe'))
+    else:
+        WKHTMLTOPDF_CMD = subprocess.Popen(['which', os.environ.get(
+            'WKHTMLTOPDF_BINARY', 'wkhtmltopdf')], stdout=subprocess.PIPE).communicate()[0].strip()
+        return pdfkit.configuration(wkhtmltopdf=WKHTMLTOPDF_CMD)
+
+
 @app.route('/api/course/<course_link>/certificate', methods=['GET'])
 @token_required
 @check_confirmed
@@ -734,7 +750,8 @@ def downloadCert(current_user, course_link):
                     </div>
                 </div>
             """ % (current_user.name, course.title, checkCert.marks,  checkCert.date)
-            pdf = pdfkit.from_string(html, False)
+            pdf = pdfkit.from_string(
+                html, False, configuration=_get_pdfkit_config())
             response = make_response(pdf)
             response.headers.set('Content-Type', 'application/pdf')
             response.headers.set('Content-Disposition',
