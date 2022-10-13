@@ -19,7 +19,7 @@ itsdangerous==1.1.0
 Jinja2==2.11.3
 Mako==1.2.2
 MarkupSafe==2.0.0
-wkhtmltopdf-pack==0.12.3.0 
+git+git://github.com/johnfraney/wkhtmltopdf-pack.git
 pdfkit==0.6.0
 psycopg2-binary==2.9.3
 pycodestyle==2.9.1
